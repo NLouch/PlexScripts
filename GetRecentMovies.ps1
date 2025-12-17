@@ -5,7 +5,48 @@ $PlexCloudEmailAddress = "xxxxxxxxxx.xxxxxxxxxx@xxxxxxxxxx.xxx"
 $PlexCloudPassword     = "xxxxxxxxxxxxxxxx"
 $LibraryName           = 'Movies'
 $TotalCount            = 10
+$CachePath             = Join-Path $env:LOCALAPPDATA 'Plex\localServer.json'
 
+
+Function Save-PlexLocalServerCache{
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory)]
+        [pscustomobject]$LocalServer,
+
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+    Try{
+        New-Item -ItemType Directory -Path (Split-Path $Path) -Force | Out-Null
+    }
+    Catch{
+        Throw "Failed to provision a directory for locally cached server details: $($_.Exception.Message)"
+    }
+    Try{
+        $LocalServer | ConvertTo-Json -Depth 3 | Set-Content -Path $Path -Encoding UTF8 | Out-Null
+    }
+    Catch{
+        Throw "Failed to save locally cached server details: $($_.Exception.Message)"
+    }
+}
+
+Function Load-PlexLocalServerCache{
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+    If(!(Test-Path $Path)) {
+        Return $null
+    }
+    Try{
+        Get-Content $Path -Raw | ConvertFrom-Json
+    }
+    Catch{
+        return $null
+    }
+}
 
 Function Get-PlexTokenFromCloud{
     [CmdletBinding()]
@@ -18,7 +59,7 @@ Function Get-PlexTokenFromCloud{
     )
     # --- LOGIN TO PLEX CLOUD ---
     $headers = @{
-        "X-Plex-Client-Identifier" = [guid]::NewGuid().ToString()
+        "X-Plex-Client-Identifier" = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Cryptography").MachineGuid
         "X-Plex-Product"           = "TokenFetcher"
         "X-Plex-Version"           = "1.0"
         "X-Plex-Device"            = "Windows"
@@ -160,21 +201,28 @@ Function Get-PlexRecentlyAddedMovieItems{
 
 
 # --- MAIN EXECUTION ---
-Try{
-    $MyPlexCloudToken = Get-PlexTokenFromCloud `
-        -AccountEmailAddress $PlexCloudEmailAddress `
-        -AccountPassword     $PlexCloudPassword
-}
-Catch{
-    Throw "Unknown error retrieving cloud token: $($_.Exception.Message)"
-}
+$MyLocalServer = Load-PlexLocalServerCache `
+    -Path $CachePath
 
-Try{
-    $MyLocalServer = Get-PlexLocalServerFromCloud `
-        -CloudToken $MyPlexCloudToken
-}
-Catch{
-    Throw "Unknown error retrieving local server: $($_.Exception.Message)"
+If(!$MyLocalServer){
+    Try{
+        $MyPlexCloudToken = Get-PlexTokenFromCloud `
+            -AccountEmailAddress $PlexCloudEmailAddress `
+            -AccountPassword     $PlexCloudPassword
+    }
+    Catch{
+        Throw "Unknown error retrieving cloud token: $($_.Exception.Message)"
+    }
+    Try{
+        $MyLocalServer = Get-PlexLocalServerFromCloud `
+            -CloudToken $MyPlexCloudToken
+    }
+    Catch{
+        Throw "Unknown error retrieving local server: $($_.Exception.Message)"
+    }
+    Save-PlexLocalServerCache `
+        -LocalServer $MyLocalServer `
+        -Path $CachePath
 }
 
 Try{
