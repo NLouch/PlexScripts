@@ -1,8 +1,6 @@
 Clear-Host
 
 # --- CONFIG ---
-$PlexCloudEmailAddress = "xxxxxxxxxx.xxxxxxxxxx@xxxxxxxxxx.xxx"
-$PlexCloudPassword     = "xxxxxxxxxxxxxxxx"
 $LibraryName           = 'Movies'
 $TotalCount            = 10
 $CachePath             = Join-Path $env:LOCALAPPDATA 'Plex\localServer.json'
@@ -57,6 +55,7 @@ Function Get-PlexTokenFromCloud{
         [Parameter(Mandatory)]
         [string]$AccountPassword
     )
+
     # --- LOGIN TO PLEX CLOUD ---
     $headers = @{
         "X-Plex-Client-Identifier" = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Cryptography").MachineGuid
@@ -206,9 +205,10 @@ $MyLocalServer = Load-PlexLocalServerCache `
 
 If(!$MyLocalServer){
     Try{
+        $PlexServerCreds = Get-Credential -Title "No locally cached connection found, so will need to authenticate via Plex Cloud" -Message "To do this, you need to provide email/password access - these are used one time and are not stored:"
         $MyPlexCloudToken = Get-PlexTokenFromCloud `
-            -AccountEmailAddress $PlexCloudEmailAddress `
-            -AccountPassword     $PlexCloudPassword
+            -AccountEmailAddress $PlexServerCreds.UserName `
+            -AccountPassword     ([Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($PlexServerCreds.Password)))
     }
     Catch{
         Throw "Unknown error retrieving cloud token: $($_.Exception.Message)"
